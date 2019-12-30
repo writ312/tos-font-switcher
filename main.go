@@ -102,7 +102,7 @@ func saveFontListXML(tosPath string, defaultFont string) {
 		<Font Name="BOOK" Filename="%s"/>
 	</Fontlist>
 	`
-	file, err := os.Create(tosPath + "\\DefaultFontlist.xml")
+	file, err := os.Create(tosPath + "\\Japanese\\fontlist.xml")
 	if err != nil {
 		//errorだと困るなぁ
 		log.Fatal(err)
