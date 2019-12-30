@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
+	"path"
 
 	"github.com/rivo/tview"
 )
@@ -28,7 +31,7 @@ func getAppDataPath() string {
 }
 
 func loadBasicSetting() string {
-	file, err := os.OpenFile(getAppDataPath()+"\\tos-path.txt", os.O_WRONLY|os.O_CREATE, 0666)
+	file, err := os.Open(getAppDataPath() + "\\tos-path.txt")
 	if err != nil {
 		//errorだと困るなぁ
 		log.Fatal(err)
@@ -36,13 +39,11 @@ func loadBasicSetting() string {
 	defer file.Close()
 	bytes, err := ioutil.ReadAll(file)
 	tosPath := string(bytes)
-	// 作ったばっかだと長さが0のはず。まあ、でも空白とか出てきても嫌なので２より小さいで。
 	if len(tosPath) < 2 {
 		if _, err := os.Stat("C:\\Program Files (x86)\\Steam\\steamapps\\common\\Tree of Savior (Japanese Ver.)"); err == nil {
 			tosPath = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Tree of Savior (Japanese Ver.)\\release\\languageData"
 		}
 	}
-	fmt.Fprintln(file, tosPath)
 	return tosPath
 }
 
@@ -133,8 +134,68 @@ func getLoaclFontList(tosPath string) []string {
 
 // func downloadFontList() {}
 
-// func downloadFontFile() {
+func downloadFontFile(fontUrl string) {
+	response, err := http.Get(fontUrl)
 
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	fmt.Println("status:", response.Status)
+
+	body, err := ioutil.ReadAll(response.Body)
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	u, _ := url.Parse(fontUrl)
+	_, filename := path.Split(u.Path)
+
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	defer func() {
+		file.Close()
+	}()
+
+	file.Write(body)
+	// TODO ZIP等なら展開して、フォルダ移動をゴニョゴニョ
+}
+
+// func unzip(file []byte) {
+
+// 	// gzipの展開
+// 	gzipReader, _ := gzip.NewReader(file)
+// 	defer gzipReader.Close()
+
+// 	// tarの展開
+// 	tarReader := tar.NewReader(gzipReader)
+
+// 	for {
+// 		tarHeader, err := tarReader.Next()
+// 		if err == io.EOF {
+// 			break
+// 		}
+
+// 		// ファイルの特定
+// 		if tarHeader.Name == "target.csv" {
+
+// 			// あとはCSVの処理
+// 			csvReader := csv.NewReader(tarReader)
+// 			for {
+// 				row, err := csvReader.Read()
+// 				if err == io.EOF {
+// 					break
+// 				}
+// 				fmt.Println("csv:", row)
+// 			}
+// 		}
+// 	}
 // }
 
 func updateFontList(tosPath string, currentFontname string, fontFileList []string, list *tview.List) {
@@ -162,8 +223,8 @@ func main() {
 	tosPath := loadBasicSetting()
 	currentFontname := loadAddonSetting(tosPath)
 	fontFileList := getLoaclFontList(tosPath)
-	// saveAddonSetting(tosPath, "HackGen-Regular.ttf", fontFileList)
-	// // * UI作成部分
+
+	// * UI作成部分
 	app := tview.NewApplication()
 	list := tview.NewList().ShowSecondaryText(false)
 	updateFontList(tosPath, currentFontname, fontFileList, list)
