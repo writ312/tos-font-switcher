@@ -1,0 +1,1 @@
+notepad %APPDATA%\ToS-Font-Switcher\tos-path.txt
