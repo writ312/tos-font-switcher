@@ -2,7 +2,8 @@
 ## 概略
 >とすのフォントを簡単に変更するソフト  
 Golang製のTUI
-
+![](assets/sample.gif)
+![](assets/sample2.png)
 ## 使い方
 >[このURL](https://github.com/writ312/tos-font-switcher/releases/latest/download/tos-font-switcher.exe)からEXEファイルをダウンロードして起動
 上下で選択肢、エンターで決定  
