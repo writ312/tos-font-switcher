@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 
 	"github.com/rivo/tview"
@@ -16,28 +17,20 @@ import (
 
 // ファイル操作部分
 
-func getAppDataPath() string {
-	home := os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
-	if home == "" {
-		home = os.Getenv("USERPROFILE")
+func makeSettingDir(basicSettingDir string) {
+	if err := os.MkdirAll(basicSettingDir, 0777); err != nil {
+		fmt.Println(err)
 	}
-	basicSettingDir := home + "\\AppData\\Roaming\\ToS-Font-Switcher"
-	if _, err := os.Stat(basicSettingDir); err != nil {
-		if err := os.MkdirAll(basicSettingDir, 0777); err != nil {
-			fmt.Println(err)
-		}
-	}
-	return basicSettingDir
 }
 
-func loadBasicSetting() string {
-	file, err := os.Open(getAppDataPath() + "\\tos-path.txt")
-	if err != nil {
-		//errorだと困るなぁ
-		log.Fatal(err)
+func loadTosPath() string {
+	basicSettingDir := os.Getenv("APPDATA") + "\\ToS-Font-Switcher"
+	if _, err := os.Stat(basicSettingDir); err != nil {
+		makeSettingDir(basicSettingDir)
 	}
+	file, _ := os.Open(basicSettingDir + "\\tos-path.txt")
 	defer file.Close()
-	bytes, err := ioutil.ReadAll(file)
+	bytes, _ := ioutil.ReadAll(file)
 	tosPath := string(bytes)
 	if len(tosPath) < 2 {
 		if _, err := os.Stat("C:\\Program Files (x86)\\Steam\\steamapps\\common\\Tree of Savior (Japanese Ver.)"); err == nil {
@@ -45,53 +38,6 @@ func loadBasicSetting() string {
 		}
 	}
 	return tosPath
-}
-
-func saveBasicSetting(tosPath string) {
-	file, err := os.Create(getAppDataPath() + "\\tos-path.txt")
-	if err != nil {
-		//errorだと困るなぁ
-		log.Fatal(err)
-	}
-	defer file.Close()
-	// TODO  書き込む前にフォルダが存在するかチェックしたほうがいいかも
-	fmt.Fprintln(file, tosPath)
-}
-
-// アドオン連携部分
-// TODO アドオン作る気力があれば
-func loadAddonSetting(tosPath string) string {
-	var settings interface{}
-	fmt.Println(tosPath + "\\settings.json")
-	file, err := os.OpenFile(tosPath+"\\settings.json", os.O_RDONLY|os.O_CREATE, 0666)
-	if err != nil {
-		//errorだと困るなぁ
-		log.Fatal(err)
-		return ""
-	}
-	defer file.Close()
-	bytes, err := ioutil.ReadAll(file)
-	if err != nil {
-		//errorだと困るなぁ
-		log.Fatal(err)
-	}
-	if len(bytes) == 0 {
-		return ""
-	}
-	err = json.Unmarshal(bytes, &settings)
-	return settings.(map[string]interface{})["Fontname"].(string)
-}
-
-func saveAddonSetting(tosPath string, currentFontname string, fontlist []string) {
-	type Settings struct {
-		Fontname string   `json: "fontname"`
-		Fontlist []string `json: "filelist"`
-	}
-	settings := new(Settings)
-	settings.Fontname = currentFontname
-	settings.Fontlist = fontlist
-	settingsJson, _ := json.Marshal(settings)
-	ioutil.WriteFile(tosPath+"\\settings.json", settingsJson, os.ModePerm)
 }
 
 func saveFontListXML(tosPath string, defaultFont string) {
@@ -112,14 +58,40 @@ func saveFontListXML(tosPath string, defaultFont string) {
 	fmt.Fprintln(file, fmt.Sprintf(fontListXML, defaultFont, defaultFont))
 }
 
+// アドオン連携部分
+func loadAddonSetting(tosPath string) string {
+	var settings interface{}
+	file, _ := os.OpenFile(tosPath+"\\settings.json", os.O_RDONLY|os.O_CREATE, 0666)
+	defer file.Close()
+	bytes, _ := ioutil.ReadAll(file)
+	if len(bytes) == 0 {
+		return ""
+	}
+	json.Unmarshal(bytes, &settings)
+	return settings.(map[string]interface{})["Fontname"].(string)
+}
+
+func saveAddonSetting(tosPath string, defaultFontName string, fontlist []string) {
+	type Settings struct {
+		Fontname string   `json: "fontname"`
+		Fontlist []string `json: "filelist"`
+	}
+	settings := new(Settings)
+	settings.Fontname = defaultFontName
+	settings.Fontlist = fontlist
+	settingsJson, _ := json.Marshal(settings)
+	ioutil.WriteFile(tosPath+"\\settings.json", settingsJson, os.ModePerm)
+}
+
 func getLoaclFontList(tosPath string) []string {
 	var fontFiles []string
-	fileinfos, _ := ioutil.ReadDir(tosPath + "\\Japanese\\font")
-	for _, fileinfo := range fileinfos {
-		fileName := fileinfo.Name()
-		ext := fileName[len(fileName)-3:]
-		if ext[:2] == "tt" {
-			fontFiles = append(fontFiles, fileinfo.Name())
+	if fileinfos, err := ioutil.ReadDir(tosPath + "\\Japanese\\font"); err == nil {
+		for _, fileinfo := range fileinfos {
+			fileName := fileinfo.Name()
+			ext := fileName[len(fileName)-3:]
+			if ext[:2] == "tt" {
+				fontFiles = append(fontFiles, fileinfo.Name())
+			}
 		}
 	}
 	return fontFiles
@@ -198,12 +170,12 @@ func downloadFontFile(fontUrl string) {
 // 	}
 // }
 
-func updateFontList(tosPath string, currentFontname string, fontFileList []string, list *tview.List) {
+func updateFontList(tosPath string, defaultFontName string, fontFileList []string, list *tview.List) {
 	list.Clear()
 	for _, fontname := range fontFileList {
 		shortcut := '-'
 		color := ""
-		if currentFontname == fontname {
+		if defaultFontName == fontname {
 			shortcut = '*'
 			color = "[blue]"
 		}
@@ -217,17 +189,29 @@ func updateFontList(tosPath string, currentFontname string, fontFileList []strin
 	}
 }
 
+func initUI(list *tview.List) {
+	tosPath := loadTosPath()
+	if _, err := os.Stat(tosPath + "\\Japanese\\font"); err != nil {
+		list.Clear()
+		text := `ToSのインストール先が不明です
+			Enterキーを押し、各自のインストール先を貼り付けてください
+			例)C:\\Program Files (x86)\\Steam\\steamapps\\common\\Tree of Savior (Japanese Ver.)\\release\\languageData`
+		list.AddItem(text, "", 's', func() {
+			exec.Command("notepad", os.Getenv("APPDATA")+"\\ToS-Font-Switcher\\tos-path.txt").Run()
+			initUI(list)
+		})
+	} else {
+		defaultFontName := loadAddonSetting(tosPath)
+		fontFileList := getLoaclFontList(tosPath)
+		updateFontList(tosPath, defaultFontName, fontFileList, list)
+	}
+
+}
+
 func main() {
-
-	// * 設定読み込み等
-	tosPath := loadBasicSetting()
-	currentFontname := loadAddonSetting(tosPath)
-	fontFileList := getLoaclFontList(tosPath)
-
-	// * UI作成部分
 	app := tview.NewApplication()
 	list := tview.NewList().ShowSecondaryText(false)
-	updateFontList(tosPath, currentFontname, fontFileList, list)
+	initUI(list)
 	if err := app.SetRoot(list, true).Run(); err != nil {
 		panic(err)
 	}
