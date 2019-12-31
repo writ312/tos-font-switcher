@@ -4,7 +4,7 @@
 Golang製のTUI
 
 ## 使い方
->[このURL](https://github.com/writ312/tos-font-switcher/raw/master/tos-font-switcher.exe)からEXEファイルをダウンロードして起動
+>[このURL](https://github.com/writ312/tos-font-switcher/releases/latest/download/tos-font-switcher.exe)からEXEファイルをダウンロードして起動
 上下で選択肢、エンターで決定  
 現在の選択中のフォントは青く表示される    
  ※最初起動時とこのソフト以外からの変更した場合は青い表示が正しいとは限らない
